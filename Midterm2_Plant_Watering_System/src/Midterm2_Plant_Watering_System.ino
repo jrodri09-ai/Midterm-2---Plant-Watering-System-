@@ -11,11 +11,25 @@ SYSTEM_MODE (SEMI_AUTOMATIC);
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <Adafruit_BME280.h>
+#include <Adafruit_MQTT.h>
+#include "Adafruit_MQTT/Adafruit_MQTT.h" 
+#include "Adafruit_MQTT/Adafruit_MQTT_SPARK.h"
+
+#include "credentials.h"
 
 #define OLED_RESET D4
 #define BME_ADDRESS 0x76
+
 Adafruit_SSD1306 display(OLED_RESET);
 Adafruit_BME280 bme;
+
+TCPClient TheClient; 
+
+Adafruit_MQTT_SPARK mqtt(&TheClient,AIO_SERVER,AIO_SERVERPORT,AIO_USERNAME,AIO_KEY);
+
+Adafruit_MQTT_Publish mqttObjSoil = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/SoilMoistureAndRoomData");
+
+/************Declare Variables*************/
 
 bool status;
 float tempC;
@@ -23,6 +37,10 @@ float tempF;
 float pressPA;
 float pressInHg;
 float humidRH;
+
+int soil;
+
+unsigned long last, lastTime;
 
 
 void setup() {
@@ -42,10 +60,29 @@ void setup() {
   delay(2000);
   display.clearDisplay();
 
+  WiFi.connect();
+  while(WiFi.connecting()) {
+    Serial.printf(".");
+
+}
 }
 
 
 void loop() {
+  // Validate connected to MQTT Broker
+  //MQTT_connect();
+
+  // Ping MQTT Broker every 2 minutes to keep connection alive
+  if ((millis()-last)>120000) {
+      Serial.printf("Pinging MQTT \n");
+      if(! mqtt.ping()) {
+        Serial.printf("Disconnecting \n");
+        mqtt.disconnect();
+      }
+      last = millis();
+  }
+
+
  int moistureReadings=analogRead(A1);
   Serial.printf("Moisture readings%i\n",moistureReadings);
   display.printf("Moisture readings%i\n",moistureReadings);
