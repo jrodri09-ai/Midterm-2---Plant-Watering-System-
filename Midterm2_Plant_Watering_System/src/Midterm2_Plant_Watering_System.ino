@@ -27,7 +27,11 @@ TCPClient TheClient;
 
 Adafruit_MQTT_SPARK mqtt(&TheClient,AIO_SERVER,AIO_SERVERPORT,AIO_USERNAME,AIO_KEY);
 
-Adafruit_MQTT_Publish mqttObjSoil = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/SoilMoistureAndRoomData");
+Adafruit_MQTT_Publish mqttObjSoil = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/SoilMoisture");
+Adafruit_MQTT_Publish mqttObjTempF = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/RoomTemp");
+Adafruit_MQTT_Publish mqttObjPressure = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/Pressure");
+Adafruit_MQTT_Publish mqttObjHumidity = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/Humidity");
+
 
 /************Declare Variables*************/
 
@@ -37,8 +41,6 @@ float tempF;
 float pressPA;
 float pressInHg;
 float humidRH;
-
-int soil;
 
 unsigned long last, lastTime;
 
@@ -65,12 +67,11 @@ void setup() {
     Serial.printf(".");
 
 }
-}
-
+}                                                         
 
 void loop() {
   // Validate connected to MQTT Broker
-  //MQTT_connect();
+  MQTT_connect();
 
   // Ping MQTT Broker every 2 minutes to keep connection alive
   if ((millis()-last)>120000) {
@@ -81,9 +82,8 @@ void loop() {
       }
       last = millis();
   }
-
-
- int moistureReadings=analogRead(A1);
+if((millis()-lastTime > 10000)) {
+  int moistureReadings=analogRead(A1);
   Serial.printf("Moisture readings%i\n",moistureReadings);
   display.printf("Moisture readings%i\n",moistureReadings);
   display.setTextSize(1);             // Normal 1:1 pixel scale
@@ -91,7 +91,12 @@ void loop() {
   display.setCursor(0,0);             // Start at top-left corner
   display.setTextColor(BLACK,WHITE); // Draw 'inverse' text
   display.display();
-
+    if(mqtt.Update()) {
+      mqttObjSoil .publish(moistureReadings);
+      Serial.printf("Publishing %0.2f \n",moistureReadings); 
+      } 
+    lastTime = millis();
+  }
 
   tempC = bme.readTemperature();
   tempF = (tempC * 9 / 5) + 32;
@@ -103,6 +108,14 @@ void loop() {
   display.printf ("temp \n %f \n", tempF);
   display.display();
 
+if((millis()-lastTime > 10000)) {
+if(mqtt.Update()) {
+      mqttObjTempF .publish(tempF);
+      Serial.printf("Publishing %0.2f \n",tempF); 
+      } 
+    lastTime = millis();
+  }
+
   pressPA = bme.readPressure();
   pressInHg = (pressPA / 3386);
   Serial.printf(" pressure %f \n", pressInHg);
@@ -112,6 +125,14 @@ void loop() {
   display.setTextColor(BLACK,WHITE); // Draw 'inverse' text
   display.printf ("pressure \n %f \n", pressInHg);
   display.display();
+
+  if((millis()-lastTime>10000)) {
+    if(mqtt.Update()) {
+      mqttObjPressure .publish(pressInHg);
+      Serial.printf("Publishing %0.2f \n",pressInHg); 
+      } 
+    lastTime = millis();
+  }
  
 humidRH = bme.readHumidity();
   Serial.printf("humidity %f \n", humidRH);
@@ -122,4 +143,31 @@ humidRH = bme.readHumidity();
   display.printf("humidity \n %f \n", humidRH);
   display.display();
 
+  if((millis()-lastTime>10000)) {
+    if(mqtt.Update()) {
+      mqttObjHumidity .publish(humidRH);
+      Serial.printf("Publishing %0.2f \n",humidRH); 
+      } 
+    lastTime = millis();
+  }
 }
+
+// Function to connect and reconnect as necessary to the MQTT server.
+void MQTT_connect() {
+  int8_t ret;
+ 
+  // Stop if already connected.
+  if (mqtt.connected()) {
+    return;
+  }
+ 
+  Serial.print("Connecting to MQTT... ");
+ 
+  while ((ret = mqtt.connect()) != 0) { // connect will return 0 for connected
+       Serial.printf("%s\n",(char *)mqtt.connectErrorString(ret));
+       Serial.printf("Retrying MQTT connection in 5 seconds..\n");
+       mqtt.disconnect();
+       delay(5000);  // wait 5 seconds
+  }
+  Serial.printf("MQTT Connected!\n");
+}                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  
