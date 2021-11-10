@@ -19,6 +19,7 @@ SYSTEM_MODE (SEMI_AUTOMATIC);
 
 #define OLED_RESET D4
 #define BME_ADDRESS 0x76
+#define MOTORPIN 11
 
 Adafruit_SSD1306 display(OLED_RESET);
 Adafruit_BME280 bme;
@@ -31,7 +32,7 @@ Adafruit_MQTT_Publish mqttObjSoil = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/
 Adafruit_MQTT_Publish mqttObjTempF = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/RoomTemp");
 Adafruit_MQTT_Publish mqttObjPressure = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/Pressure");
 Adafruit_MQTT_Publish mqttObjHumidity = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/Humidity");
-
+Adafruit_MQTT_Subscribe mqttObjPumpOn = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/OnOff");
 
 /************Declare Variables*************/
 
@@ -42,7 +43,8 @@ float pressPA;
 float pressInHg;
 float humidRH;
 
-unsigned long last, lastTime;
+
+unsigned long last, lastTime, startPumpTime;
 
 
 void setup() {
@@ -52,6 +54,7 @@ void setup() {
     Serial.printf ("BME at address 0x%02X failed to start", BME_ADDRESS);
   }
   pinMode(A1,INPUT);
+  pinMode(11,OUTPUT);
 
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
   display.display();
@@ -67,6 +70,8 @@ void setup() {
     Serial.printf(".");
 
 }
+// Setup MQTT subscription for onoff feed.
+  mqtt.subscribe(&mqttObjPumpOn);
 }                                                         
 
 void loop() {
@@ -82,7 +87,7 @@ void loop() {
       }
       last = millis();
   }
-if((millis()-lastTime > 10000)) {
+
   int moistureReadings=analogRead(A1);
   Serial.printf("Moisture readings%i\n",moistureReadings);
   display.printf("Moisture readings%i\n",moistureReadings);
@@ -91,6 +96,8 @@ if((millis()-lastTime > 10000)) {
   display.setCursor(0,0);             // Start at top-left corner
   display.setTextColor(BLACK,WHITE); // Draw 'inverse' text
   display.display();
+
+  if((millis()-lastTime > 10000)) {
     if(mqtt.Update()) {
       mqttObjSoil .publish(moistureReadings);
       Serial.printf("Publishing %0.2f \n",moistureReadings); 
@@ -150,6 +157,9 @@ humidRH = bme.readHumidity();
       } 
     lastTime = millis();
   }
+
+pumpOn(moistureReadings,getbuttonvalue());
+pumpOff();
 }
 
 // Function to connect and reconnect as necessary to the MQTT server.
@@ -170,4 +180,32 @@ void MQTT_connect() {
        delay(5000);  // wait 5 seconds
   }
   Serial.printf("MQTT Connected!\n");
-}                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  
+} 
+int getbuttonvalue(){
+  int buttonvalue;
+Adafruit_MQTT_Subscribe *subscription;
+  while ((subscription = mqtt.readSubscription(1000))) {
+    if (subscription == &mqttObjPumpOn) {
+      buttonvalue = atoi((char *)mqttObjPumpOn.lastread);
+          Serial.printf("Received %0.2f from Adafruit.io feed FeedNameB \n", buttonvalue);
+    }
+  }
+  return buttonvalue;
+}
+  //Function to get motor turning on every half second
+  //digitalWrite(MOTORPIN, HIGH);
+void pumpOn(int moistureReadings, int buttonvalue){
+Serial.printf("pump on\n");
+if(moistureReadings > 3446||buttonvalue) {
+  digitalWrite(MOTORPIN,HIGH);
+  startPumpTime=(millis());
+}
+}
+
+void pumpOff () { 
+  Serial.printf("pump off\n");
+  if (millis()-startPumpTime>2000) {
+    digitalWrite(MOTORPIN, LOW);
+  }
+}
+ 
